@@ -3,7 +3,7 @@
   searching the directories in the PATH environment variable.
   Specified executable are run in a child process.
 
-  Alexander Hamme
+  Alexander Hamme, Keith O'Hara
   Assignment 2: BShell
   10/15/18
 */
