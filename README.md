@@ -1,7 +1,7 @@
 # BShell
 BShell: the Bard Shell
 
-BShell is a simple implementation of a Unix shell program. This was originally a lab project for my Computing Systems class at Bard college which I have kept working on for fun.
+BShell is a simple implementation of a Unix shell program. This was originally a lab project for my Computing Systems class at Bard college which I have continued working on for fun.
 
 Currently Implemented Features:
 - ls, cd
