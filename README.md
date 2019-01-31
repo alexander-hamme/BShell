@@ -15,5 +15,5 @@ Features to be Implemented Next:
 - wildcard (`*`) expansion, e.g. `cat *.txt`
 - I/O redirection (`>` and `<`), e.g. `ls ./ > filelist.txt`
 - piping (`|`), e.g. `cat example.txt | grep “keyword”`
+- tab completion
 - history function
-
