@@ -251,8 +251,7 @@ void killJob(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **job
 	}
 	// reposition job arrays to fill any null values between non-null values
 	for (int m = jb; m < currNmbJobs; m++) {    //
-		if (jobNames[m] ==
-		    NULL) {      // replace this NULL value with the next non-NULL value, if there are any
+		if (jobNames[m] == NULL) {      // replace this NULL value with the next non-NULL value, if there are any
 			for (int n = m + 1; n < currNmbJobs; n++) {
 				if (jobNames[n] == NULL) {
 					continue;
@@ -363,16 +362,6 @@ int main(int argc, char *argv[]) {
 		userName = "user";  // default name if getting name was unsuccessful
 	}
 
-	// for listing jobs
-	char *jobNames[MAX_BACKGROUND_JOBS];
-	int jobIDs[MAX_BACKGROUND_JOBS];
-
-	// initialize job name char arrays to NULL
-	for (int i = 0; i < MAX_BACKGROUND_JOBS; i++) {
-		jobNames[i] = NULL;
-		jobIDs[i] = 0;
-	}
-
 
 	/* NEW */
 	for (int i = 0; i < MAX_BACKGROUND_JOBS; i++) {
@@ -417,9 +406,6 @@ int main(int argc, char *argv[]) {
 			continue;
 		}
 
-
-		cleanUpJobs(&currNumbJobs, jobIDs, jobNames);
-
 		/* NEW */
 		cleanUpJobs2(&jobs);
 		/* NEW */
@@ -434,15 +420,11 @@ int main(int argc, char *argv[]) {
 
 		// if input contains "&" at end, and current number of backgrounded tasks is not at the maximum,
 		// the new command will be run in the background
-		int runInBackground = 0;
+		int runInBackground = FALSE;
 		if (command->argv[argc - 1][0] == '&') {
+
 			if (currNumbJobs < MAX_BACKGROUND_JOBS) {
-				runInBackground = 1;
-
-				// todo remove
-				jobNames[currNumbJobs] = command->argv[0];
-
-
+				runInBackground = TRUE;
 			} else {
 				printf("Maximum number of background tasks already running, running job in foreground.\n");
 			}
@@ -462,14 +444,6 @@ int main(int argc, char *argv[]) {
 				if (currNumbJobs == 0) {
 					printf("No current jobs in background\n");
 				} else {
-
-
-
-					for (int l = 0; l < currNumbJobs; l++) {
-						if (jobNames[l] != NULL) {
-							printf("%d\t%s\n", jobIDs[l], jobNames[l]);
-						}
-					}
 
 					for (int l = 0; l < currNumbJobs; l++) {
 						if (jobs[l].name != NULL) {
@@ -502,8 +476,6 @@ int main(int argc, char *argv[]) {
 						pidToKill = (pid_t) strtol(command->argv[i + 1], NULL, 10);
 					}
 
-
-					killJob(sig, pidToKill, currNumbJobs, jobIDs, jobNames);
 					killJob2(sig, pidToKill, currNumbJobs, jobs);
 
 					currNumbJobs--;
@@ -570,9 +542,6 @@ int main(int argc, char *argv[]) {
 
 						jobs[currNumbJobs].pid = pid;
 						jobs[currNumbJobs].name = command->argv[0];   // TODO use the whole command, not just first word?
-
-						// todo remove
-						jobIDs[currNumbJobs] = pid;
 
 						currNumbJobs++;
 
