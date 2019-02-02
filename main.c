@@ -260,17 +260,24 @@ void killJob(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **job
 }
 
 
-struct jobsArgStruct {
+/*struct jobsArgStruct {
 	int _currNumbJobs;
 	int *_jobIDs;
 	char **_jobNames;
-};
+};*/
 
-void cleanUpJobs2(void *arguments) {
+void cleanUpJobs2(void *jobs_struct_array) {
+
 	printf("Checking values...");
-	struct jobsArgStruct *args = arguments;
-	printf("%d\n", args->_currNumbJobs);
-	printf("%d\n", args->_jobIDs[0]);
+
+	Job **jobs = jobs_struct_array;
+
+	for (int i=0; i<MAX_BACKGROUND_JOBS; i++) {
+
+		printf("%d\t", jobs[i]->pid);
+		printf("%s\t", jobs[i]->name);
+		printf("%d\n", jobs[i]->still_running);
+	}
 	pthread_exit(NULL);
 }
 
@@ -340,16 +347,13 @@ int main(int argc, char *argv[]) {
 
 
 		pthread_t jobCleanup;
-		struct jobsArgStruct jobArgs;
+
 
 
 
 		/* TODO: make a Job struct  that contains pid, name, and currently_running_status */
 
 
-
-
-		jobArgs._jobIDs = &currNumbJobs;
 
 		/* TODO: put this in one thread, and check for job completion in another */
 		if (fgets(input, MAX_ARGS * MAX_ARG_LEN, stdin) == NULL || input[0] == '\n') {
@@ -359,6 +363,11 @@ int main(int argc, char *argv[]) {
 
 
 		cleanUpJobs(&currNumbJobs, jobIDs, jobNames);
+
+		/* NEW */
+		cleanUpJobs2(jobs);
+		/* NEW */
+
 
 		int argc = parseCmd(input, command);
 
@@ -374,6 +383,13 @@ int main(int argc, char *argv[]) {
 			if (currNumbJobs < MAX_BACKGROUND_JOBS) {
 				runInBackground = 1;
 				jobNames[currNumbJobs] = command->argv[0];
+
+
+				/* NEW */
+							// TODO
+				/* NEW */
+
+
 			} else {
 				printf("Maximum number of background tasks already running, running job in foreground.\n");
 			}
