@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <string.h>
 #include <wait.h>
+#include <pthread.h>
 
 int parsePath(char *dirs[]);
 
@@ -104,7 +105,7 @@ int parsePath(char *dirs[]) {
 
 char *lookupPath(char *fname, char **dir, int num) {
 	char *fullName; // resultant name
-	int maxlen; // max length copied or concatenated.
+	size_t maxlen; // max length copied or concatenated.
 	int i;
 
 	fullName = (char *) malloc(MAX_PATH_LEN);
@@ -181,11 +182,96 @@ void ignoreSIGINT(int sig) {
 }
 
 
-void killJobs(int signal, int pid, int *jobIDs_inner, char **jobNames_inner) {
+void cleanUpJobs(int *currNumbJobs, int *jobIDs, char **jobNames) {
 
-	int x = 1 + 1;
-	printf("%d", jobIDs_inner[0]);
-	//printf("%d - %s", *(jobIDs_inner), jobNames_inner);
+//	while(1) {}
+
+	// check if any jobs in the list have pids that no longer exist
+	int jb = 0;
+	for (; jb < *(currNumbJobs); jb++) {
+		if (getpgid(jobIDs[jb]) >= 0) {
+
+			printf("Removing job that is no longer valid: %d %s", jobIDs[jb], jobNames[jb]);
+
+			jobNames[jb] = NULL;
+			jobIDs[jb] = 0;
+			currNumbJobs--;
+		}
+	}
+	// reposition job arrays to fill any null values between non-null values
+	for (int m = jb; m < MAX_BACKGROUND_JOBS; m++) {    //
+
+		if (jobNames[m] ==
+		    NULL) {      // replace this NULL value with the next non-NULL value in the list, if one exists
+			for (int n = m + 1; n < MAX_BACKGROUND_JOBS; n++) {
+
+				if (jobNames[n] != NULL) {
+					jobNames[m] = jobNames[n];
+					jobIDs[m] = jobIDs[n];
+					jobNames[n] = NULL;
+					jobIDs[n] = 0;
+					break;
+				}
+			}
+		}
+	}
+}
+
+
+
+/* TODO: figure out how to check if a job has completed or been terminated externally,
+ * then automatically remove it from jobs list */
+
+/** kill job
+ * @param signal signal to pass to kill
+ * @param pidToKill
+ * @param currNmbJobs current number of jobs
+ * @param jobIDs list of job ids
+ * @param jobNames list of corresponding job names
+ */
+void killJob(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **jobNames) {
+
+	kill(pidToKill, signal);
+
+	int jb = 0;
+	for (; jb < currNmbJobs; jb++) {
+		if (jobIDs[jb] == pidToKill) {
+			jobNames[jb] = NULL;
+			jobIDs[jb] = 0;
+		}
+	}
+	// reposition job arrays to fill any null values between non-null values
+	for (int m = jb; m < currNmbJobs; m++) {    //
+		if (jobNames[m] ==
+		    NULL) {      // replace this NULL value with the next non-NULL value, if there are any
+			for (int n = m + 1; n < currNmbJobs; n++) {
+				if (jobNames[n] == NULL) {
+					continue;
+				}
+				jobNames[m] = jobNames[n];
+				jobIDs[m] = jobIDs[n];
+				jobNames[n] = NULL;
+				jobIDs[n] = 0;
+				break;
+			}
+		}
+	}
+
+}
+
+
+struct jobsArgStruct {
+	int _currNumbJobs;
+	int *_jobIDs;
+	char **_jobNames;
+};
+
+void cleanUpJobs2(void *arguments) {
+	printf("Checking values...");
+	struct jobsArgStruct *args = arguments;
+	printf("%d\n", args->_currNumbJobs);
+	printf("%d\n", args->_jobIDs[0]);
+	pthread_exit(NULL);
 }
 
 
@@ -198,13 +284,14 @@ int main(int argc, char *argv[]) {
 	int numDirs;
 	char cmdline[LINE_LEN];
 
-	int maxBackgroundJobs = 10;
-
 	numDirs = parsePath(dirs);
 	char args[MAX_ARGS][MAX_ARG_LEN];
 
 	char *input;
 	Command *command;
+
+
+	Job *jobs[MAX_BACKGROUND_JOBS];
 
 	// try to get username
 	char *userName;
@@ -213,16 +300,26 @@ int main(int argc, char *argv[]) {
 	}
 
 	// for listing jobs
-	char *jobNames[maxBackgroundJobs];
-	int jobIDs[maxBackgroundJobs];
+	char *jobNames[MAX_BACKGROUND_JOBS];
+	int jobIDs[MAX_BACKGROUND_JOBS];
 
 	// initialize job name char arrays to NULL
-	for (int i = 0; i < maxBackgroundJobs; i++) {
+	for (int i = 0; i < MAX_BACKGROUND_JOBS; i++) {
 		jobNames[i] = NULL;
 		jobIDs[i] = 0;
 	}
 
-	int jobIndx = 0;
+
+	/* NEW */
+	for (int i = 0; i < MAX_BACKGROUND_JOBS; i++) {
+		jobs[i]->pid = 0;
+		jobs[i]->name = NULL;
+		jobs[i]->still_running = 0;
+	}
+	/* NEW */
+
+
+	int currNumbJobs = 0;
 
 	// ignore Ctrl-C while in Terminal
 	struct sigaction sigHandler;
@@ -241,10 +338,27 @@ int main(int argc, char *argv[]) {
 
 		printf("%s@bshell:%s$ ", userName, currDir);
 
+
+		pthread_t jobCleanup;
+		struct jobsArgStruct jobArgs;
+
+
+
+		/* TODO: make a Job struct  that contains pid, name, and currently_running_status */
+
+
+
+
+		jobArgs._jobIDs = &currNumbJobs;
+
+		/* TODO: put this in one thread, and check for job completion in another */
 		if (fgets(input, MAX_ARGS * MAX_ARG_LEN, stdin) == NULL || input[0] == '\n') {
 			// if nothing was entered into shell, do nothing
 			continue;
 		}
+
+
+		cleanUpJobs(&currNumbJobs, jobIDs, jobNames);
 
 		int argc = parseCmd(input, command);
 
@@ -257,16 +371,16 @@ int main(int argc, char *argv[]) {
 		// the new command will be run in the background
 		int runInBackground = 0;
 		if (command->argv[argc - 1][0] == '&') {
-			if (jobIndx < maxBackgroundJobs) {
+			if (currNumbJobs < MAX_BACKGROUND_JOBS) {
 				runInBackground = 1;
-				jobNames[jobIndx] = command->argv[0];
+				jobNames[currNumbJobs] = command->argv[0];
 			} else {
 				printf("Maximum number of background tasks already running, running job in foreground.\n");
 			}
 		}
 
 		// parse input. compare against special commands first,
-		// then try to 
+		// if unsuccessful then check if input is a valid executable
 		for (int i = 0; i < argc; i++) {
 
 			if (strncmp(command->argv[i], "cd", 2) == 0 && i < argc - 1) {
@@ -276,10 +390,10 @@ int main(int argc, char *argv[]) {
 					continue;
 				}
 			} else if (strncmp(command->argv[i], "jobs", 4) == 0) {  // list jobs
-				if (jobIndx == 0) {
+				if (currNumbJobs == 0) {
 					printf("No current jobs in background\n");
 				} else {
-					for (int l = 0; l < jobIndx; l++) {
+					for (int l = 0; l < currNumbJobs; l++) {
 						if (jobNames[l] != NULL) {
 							printf("%d\t%s\n", jobIDs[l], jobNames[l]);
 						}
@@ -290,10 +404,10 @@ int main(int argc, char *argv[]) {
 
 			} else if (strncmp(command->argv[i], "kill", 4) == 0) {
 
-				int sig = 15; // default signal
 				if (i < argc - 1) {  // if kill has at least one argument provided
 
 					pid_t pidToKill;
+					int sig = 15; // default signal
 
 					// convert string termination signal to int
 					if (i < argc - 2 && command->argv[i + 1][0] == '-') {
@@ -309,37 +423,14 @@ int main(int argc, char *argv[]) {
 						pidToKill = (pid_t) strtol(command->argv[i + 1], NULL, 10);
 					}
 
-					killJobs(sig, pidToKill, &jobIDs, &jobNames);
+					killJob(sig, pidToKill, currNumbJobs, jobIDs, jobNames);
 
-					kill(pidToKill, sig);
+					currNumbJobs--;
 
-					int jb = 0;
-					for (; jb < jobIndx; jb++) {
-						if (jobIDs[jb] == pidToKill) {
-							jobNames[jb] = NULL;
-							jobIDs[jb] = 0;
-						}
-					}
-					// reposition job arrays to fill any null values between non-null values
-					for (int m = jb; m < jobIndx; m++) {    //
-						if (jobNames[m] ==
-						    NULL) {      // replace this NULL value with the next non-NULL value, if there are any
-							for (int n = m + 1; n < jobIndx; n++) {
-								if (jobNames[n] == NULL) {
-									continue;
-								}
-								jobNames[m] = jobNames[n];
-								jobIDs[m] = jobIDs[n];
-								jobNames[n] = NULL;
-								jobIDs[n] = 0;
-								break;
-							}
-						}
-					}
 					// todo reposition arrays so empty spaces are all together at end
 //            			}
 //            		}
-					i += 2;
+					i += 2;  // increase input index past signal and pid words
 				} else {
 					printf("Not enough arguments passed to kill command\n");
 				}
@@ -395,7 +486,7 @@ int main(int argc, char *argv[]) {
 				} else {
 
 					if (runInBackground) {
-						jobIDs[jobIndx++] = pid;
+						jobIDs[currNumbJobs++] = pid;
 					} else {
 						waitpid(pid, NULL, 0);
 					}
