@@ -183,7 +183,7 @@ void ignoreSIGINT(int sig) {
 }
 
 
-void cleanUpJobs(int *currNumbJobs, int *jobIDs, char **jobNames) {
+void cleanUpJobs1(int *currNumbJobs, int *jobIDs, char **jobNames) {
 
 //	while(1) {}
 
@@ -238,7 +238,7 @@ void cleanUpJobs(int *currNumbJobs, int *jobIDs, char **jobNames) {
  * @param jobIDs list of job ids
  * @param jobNames list of corresponding job names
  */
-void killJob(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **jobNames) {
+void killJob_(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **jobNames) {
 
 	kill(pidToKill, signal);
 
@@ -276,22 +276,46 @@ void killJob(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **job
  * @param jobIDs list of job ids
  * @param jobNames list of corresponding job names
  */
-void killJob2(int signal, int pidToKill, int currNmbJobs, Job* jobs) {
+void killJob(int signal, int pidToKill, int *currNmbJobs, Job *jobs) {
 
 	kill(pidToKill, signal);
 
-	int i = 0;
-	for (; i < currNmbJobs; i++) {
-		if (jobs[i].pid == pidToKill) {
-			jobs[i].pid = 0;
-			jobs[i].name = NULL;
-			break;
+	if (signal != 0) {
+
+		int i = 0;
+		for (; i < *(currNmbJobs); i++) {
+			if (jobs[i].pid == pidToKill) {
+				jobs[i].pid = 0;
+				jobs[i].name = NULL;
+
+				// only decrement currNmbJobs if the PID passed to kill matches a backgrounded task in the array
+				(*currNmbJobs)--;  //  this is the same as *currNmbJobs = *(currNmbJobs) - 1;
+				break;
+			}
 		}
 	}
-	// reposition job arrays to fill any null values between non-null values
-	for (i = 0; i < currNmbJobs; i++) {    //
-		if (jobs[i].name == NULL) {      // replace this NULL value with the next non-NULL value, if there are any
-			for (int m = i + 1; m < currNmbJobs; m++) {
+}
+
+//void cleanUpJobs(void *jobs_struct_array) {  // for potential future multithreading
+void cleanUpJobs(Job *jobs, int *currNumbJobs) {
+
+	// check for completed jobs that should be removed, and simultaneously
+	// reposition job array elements to make sure all null values are at end of array
+	for (int i = 0; i < MAX_BACKGROUND_JOBS; i++) {
+
+		errno = 0;
+		kill(jobs[i].pid, 0);   // check if process is still alive
+
+		if (errno == ESRCH) {
+			printf("Deceased job:\t");
+			printf("%d\t", jobs[i].pid);
+			printf("%s\t", jobs[i].name);
+
+			// todo
+		}
+
+		if (jobs[i].name == NULL) {      // replace this NULL value with the next non-NULL value, if one exists
+			for (int m = i + 1; m < MAX_BACKGROUND_JOBS; m++) {
 				if (jobs[m].name == NULL) {
 					continue;
 				}
@@ -303,36 +327,6 @@ void killJob2(int signal, int pidToKill, int currNmbJobs, Job* jobs) {
 				break;
 			}
 		}
-	}
-
-}
-
-
-/*struct jobsArgStruct {
-	int _currNumbJobs;
-	int *_jobIDs;
-	char **_jobNames;
-};*/
-
-void cleanUpJobs2(void *jobs_struct_array) {
-
-	printf("Checking values...\n");
-
-	Job *jobs = (Job *) jobs_struct_array;
-
-
-	for (int i = 0; i < MAX_BACKGROUND_JOBS; i++) {
-
-		errno = 0;
-
-		kill(jobs[i].pid, 0);   // check if process is still alive
-
-		if (errno == ESRCH) {
-			printf("Removing deceased job:\t");
-			printf("%d\t", jobs[i].pid);
-			printf("%s\t", jobs[i].name);
-		}
-
 	}
 	//pthread_exit(NULL);
 }
@@ -390,26 +384,13 @@ int main(int argc, char *argv[]) {
 
 		printf("%s@bshell:%s$ ", userName, currDir);
 
+		cleanUpJobs(jobs, &currNumbJobs);
 
-		pthread_t jobCleanup;
-
-
-
-
-		/* TODO: make a Job struct  that contains pid, name, and currently_running_status */
-
-
-
-		/* TODO: put this in one thread, and check for job completion in another */
+		/* TODO: put this in a separate thread? */
 		if (fgets(input, MAX_ARGS * MAX_ARG_LEN, stdin) == NULL || input[0] == '\n') {
 			// if nothing was entered into shell, do nothing
 			continue;
 		}
-
-		/* NEW */
-		cleanUpJobs2(&jobs);
-		/* NEW */
-
 
 		int argc = parseCmd(input, command);
 
@@ -476,9 +457,14 @@ int main(int argc, char *argv[]) {
 						pidToKill = (pid_t) strtol(command->argv[i + 1], NULL, 10);
 					}
 
-					killJob2(sig, pidToKill, currNumbJobs, jobs);
 
-					currNumbJobs--;
+					printf("Curr numb jobs is: %d", currNumbJobs);
+
+					// ONLY decrement currNumbJobs if a job is successfully removed
+					killJob(sig, pidToKill, &currNumbJobs, jobs);
+
+					printf("Curr numb jobs is now: %d", currNumbJobs);
+					//currNumbJobs--;
 
 					// todo reposition arrays so empty spaces are all together at end
 //            			}
