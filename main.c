@@ -16,6 +16,7 @@
 #include <string.h>
 #include <wait.h>
 #include <pthread.h>
+#include <errno.h>
 
 int parsePath(char *dirs[]);
 
@@ -189,13 +190,21 @@ void cleanUpJobs(int *currNumbJobs, int *jobIDs, char **jobNames) {
 	// check if any jobs in the list have pids that no longer exist
 	int jb = 0;
 	for (; jb < *(currNumbJobs); jb++) {
-		if (getpgid(jobIDs[jb]) >= 0) {
 
-			printf("Removing job that is no longer valid: %d %s", jobIDs[jb], jobNames[jb]);
+		/* Note: even if a process finishes and exits, it's PID sometimes
+		 * remains valid until the zombie process is reaped by its parent process
+		 */
+
+
+		kill(jobIDs[jb], 0);   // check if process is still alive
+		if (errno == ESRCH) {
 
 			jobNames[jb] = NULL;
 			jobIDs[jb] = 0;
 			currNumbJobs--;
+
+		} else {
+			//printf("Job is still valid: %d %s\n", jobIDs[jb], jobNames[jb]);
 		}
 	}
 	// reposition job arrays to fill any null values between non-null values
@@ -256,6 +265,46 @@ void killJob(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **job
 			}
 		}
 	}
+}
+
+/* TODO: figure out how to check if a job has completed or been terminated externally,
+ * then automatically remove it from jobs list */
+
+/** kill job
+ * @param signal signal to pass to kill
+ * @param pidToKill
+ * @param currNmbJobs current number of jobs
+ * @param jobIDs list of job ids
+ * @param jobNames list of corresponding job names
+ */
+void killJob2(int signal, int pidToKill, int currNmbJobs, Job* jobs) {
+
+	kill(pidToKill, signal);
+
+	int i = 0;
+	for (; i < currNmbJobs; i++) {
+		if (jobs[i].pid == pidToKill) {
+			jobs[i].pid = 0;
+			jobs[i].name = NULL;
+			break;
+		}
+	}
+	// reposition job arrays to fill any null values between non-null values
+	for (i = 0; i < currNmbJobs; i++) {    //
+		if (jobs[i].name == NULL) {      // replace this NULL value with the next non-NULL value, if there are any
+			for (int m = i + 1; m < currNmbJobs; m++) {
+				if (jobs[m].name == NULL) {
+					continue;
+				}
+				jobs[i].name = jobs[m].name;
+				jobs[i].pid = jobs[m].pid;
+
+				jobs[m].name = NULL;
+				jobs[m].pid = 0;
+				break;
+			}
+		}
+	}
 
 }
 
@@ -268,17 +317,25 @@ void killJob(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **job
 
 void cleanUpJobs2(void *jobs_struct_array) {
 
-	printf("Checking values...");
+	printf("Checking values...\n");
 
-	Job **jobs = jobs_struct_array;
+	Job *jobs = (Job *) jobs_struct_array;
 
-	for (int i=0; i<MAX_BACKGROUND_JOBS; i++) {
 
-		printf("%d\t", jobs[i]->pid);
-		printf("%s\t", jobs[i]->name);
-		printf("%d\n", jobs[i]->still_running);
+	for (int i = 0; i < MAX_BACKGROUND_JOBS; i++) {
+
+		errno = 0;
+
+		kill(jobs[i].pid, 0);   // check if process is still alive
+
+		if (errno == ESRCH) {
+			printf("Removing deceased job:\t");
+			printf("%d\t", jobs[i].pid);
+			printf("%s\t", jobs[i].name);
+		}
+
 	}
-	pthread_exit(NULL);
+	//pthread_exit(NULL);
 }
 
 
@@ -298,7 +355,7 @@ int main(int argc, char *argv[]) {
 	Command *command;
 
 
-	Job *jobs[MAX_BACKGROUND_JOBS];
+	Job jobs[MAX_BACKGROUND_JOBS];
 
 	// try to get username
 	char *userName;
@@ -319,9 +376,8 @@ int main(int argc, char *argv[]) {
 
 	/* NEW */
 	for (int i = 0; i < MAX_BACKGROUND_JOBS; i++) {
-		jobs[i]->pid = 0;
-		jobs[i]->name = NULL;
-		jobs[i]->still_running = 0;
+		jobs[i].pid = 0;
+		jobs[i].name = NULL;
 	}
 	/* NEW */
 
@@ -365,7 +421,7 @@ int main(int argc, char *argv[]) {
 		cleanUpJobs(&currNumbJobs, jobIDs, jobNames);
 
 		/* NEW */
-		cleanUpJobs2(jobs);
+		cleanUpJobs2(&jobs);
 		/* NEW */
 
 
@@ -382,12 +438,9 @@ int main(int argc, char *argv[]) {
 		if (command->argv[argc - 1][0] == '&') {
 			if (currNumbJobs < MAX_BACKGROUND_JOBS) {
 				runInBackground = 1;
+
+				// todo remove
 				jobNames[currNumbJobs] = command->argv[0];
-
-
-				/* NEW */
-							// TODO
-				/* NEW */
 
 
 			} else {
@@ -409,11 +462,21 @@ int main(int argc, char *argv[]) {
 				if (currNumbJobs == 0) {
 					printf("No current jobs in background\n");
 				} else {
+
+
+
 					for (int l = 0; l < currNumbJobs; l++) {
 						if (jobNames[l] != NULL) {
 							printf("%d\t%s\n", jobIDs[l], jobNames[l]);
 						}
 					}
+
+					for (int l = 0; l < currNumbJobs; l++) {
+						if (jobs[l].name != NULL) {
+							printf("%d\t%s\n", jobs[l].pid, jobs[l].name);
+						}
+					}
+
 				}
 				i++;
 				continue;
@@ -439,7 +502,9 @@ int main(int argc, char *argv[]) {
 						pidToKill = (pid_t) strtol(command->argv[i + 1], NULL, 10);
 					}
 
+
 					killJob(sig, pidToKill, currNumbJobs, jobIDs, jobNames);
+					killJob2(sig, pidToKill, currNumbJobs, jobs);
 
 					currNumbJobs--;
 
@@ -502,7 +567,15 @@ int main(int argc, char *argv[]) {
 				} else {
 
 					if (runInBackground) {
-						jobIDs[currNumbJobs++] = pid;
+
+						jobs[currNumbJobs].pid = pid;
+						jobs[currNumbJobs].name = command->argv[0];   // TODO use the whole command, not just first word?
+
+						// todo remove
+						jobIDs[currNumbJobs] = pid;
+
+						currNumbJobs++;
+
 					} else {
 						waitpid(pid, NULL, 0);
 					}

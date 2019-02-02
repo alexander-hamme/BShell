@@ -5,6 +5,9 @@
 //#define DEBUG 1
 #define LINE_LEN 80
 
+#define TRUE 1
+#define FALSE 0
+
 #define MAX_ARGS 64
 #define MAX_ARG_LEN 16
 
@@ -29,5 +32,5 @@ typedef struct {
 typedef struct {
 	int pid;
 	char *name;
-	int still_running;
+//	int still_running;
 } Job;
