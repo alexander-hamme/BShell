@@ -331,6 +331,47 @@ void cleanUpJobs(Job *jobs, int *currNumbJobs) {
 	//pthread_exit(NULL);
 }
 
+/**
+ *
+ * @param numb_args  initially 0, incremented with each valid arg and value used externally
+ * @param argsForCommand
+ * @param command
+ * @param fullPath
+ * @param input_index
+ * @param argc
+ * @return
+ */
+char** parseArgs(int *numb_args, char** argsForCommand, Command *command, char *fullPath, int *input_index, int argc) {
+	// parse the argument flags
+
+	int flagIndx = 0;
+
+	for (; flagIndx < MAX_ARGS; flagIndx++) {
+		argsForCommand[flagIndx] = NULL;
+	}
+
+	flagIndx = 0;     // initialize the first argument as the program's own name, which is how argv is expected
+	argsForCommand[flagIndx++] = fullPath;
+
+	// equivalent to *input_index = *(input_index) + 1; j = *(input_index)
+	int j = ++(*input_index);
+	while (j < argc && command->argv[j] != NULL) {         // pass all
+
+		// assume all subsequent non-valid program names are arguments or flags to be passed to previous command
+		if (command->argv[j][0] != '&') {
+		//&& (command->argv[j][0] == '-' || lookupPath(command->argv[j], dirs, numDirs) == NULL)) {
+			argsForCommand[flagIndx++] = command->argv[j++];
+			input_index++;    // only increment i if the current argv value is a flag
+		} else {
+			break;
+		}
+	}
+
+	*numb_args = flagIndx;
+
+	return argsForCommand;
+}
+
 
 /*
   Run the shell
@@ -422,17 +463,15 @@ int main(int argc, char *argv[]) {
 					continue;
 				}
 			} else if (strncmp(command->argv[i], "jobs", 4) == 0) {  // list jobs
-				if (currNumbJobs == 0) {
+				/*if (currNumbJobs == 0) {
 					printf("No current jobs in background\n");
-				} else {
-
-					for (int l = 0; l < currNumbJobs; l++) {
-						if (jobs[l].name != NULL) {
-							printf("%d\t%s\n", jobs[l].pid, jobs[l].name);
-						}
+				} else {*/
+				for (int l = 0; l < currNumbJobs; l++) {
+					if (jobs[l].name != NULL) {
+						printf("%d\t%s\n", jobs[l].pid, jobs[l].name);
 					}
-
 				}
+
 				i++;
 				continue;
 
@@ -457,18 +496,8 @@ int main(int argc, char *argv[]) {
 						pidToKill = (pid_t) strtol(command->argv[i + 1], NULL, 10);
 					}
 
-
-					printf("Curr numb jobs is: %d", currNumbJobs);
-
-					// ONLY decrement currNumbJobs if a job is successfully removed
 					killJob(sig, pidToKill, &currNumbJobs, jobs);
 
-					printf("Curr numb jobs is now: %d", currNumbJobs);
-					//currNumbJobs--;
-
-					// todo reposition arrays so empty spaces are all together at end
-//            			}
-//            		}
 					i += 2;  // increase input index past signal and pid words
 				} else {
 					printf("Not enough arguments passed to kill command\n");
@@ -484,30 +513,10 @@ int main(int argc, char *argv[]) {
 
 			if (fullPath != NULL) {
 
-				// parse the argument flags
-
 				char *argsForCommand[MAX_ARGS];
-				int flagIndx = 0;
+				int numb_args = 0;
 
-				for (; flagIndx < MAX_ARGS; flagIndx++) {
-					argsForCommand[flagIndx] = NULL;
-				}
-
-				flagIndx = 0;     // initialize the first argument as the program's own name, which is how argv is expected
-				argsForCommand[flagIndx++] = fullPath;
-
-				int j = ++i;
-				while (j < argc && command->argv[j] != NULL) {         // pass all
-
-					// assume all subsequent non-valid program names are arguments or flags to be passed to previous command
-					if (command->argv[j][0] != '&' &&
-					    (command->argv[j][0] == '-' || lookupPath(command->argv[j], dirs, numDirs) == NULL)) {
-						argsForCommand[flagIndx++] = command->argv[j++];
-						i++;    // only increment i if the current argv value is a flag
-					} else {
-						break;
-					}
-				}
+				parseArgs(&numb_args, argsForCommand, command, fullPath, &i, argc);
 
 				pid_t pid = fork();
 
@@ -516,7 +525,7 @@ int main(int argc, char *argv[]) {
 					// run the executable, passing in the parsed argument flags
 					execv(fullPath, argsForCommand);
 
-					for (int k = 0; k < flagIndx; k++) {
+					for (int k = 0; k < numb_args; k++) {
 						free(argsForCommand[k]);
 					}
 
