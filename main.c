@@ -409,6 +409,7 @@ int main(int argc, char *argv[]) {
 	int currNumbJobs = 0;
 
 	// ignore Ctrl-C while in Terminal
+	// TODO interrupt frozen processes without exiting terminal?
 	struct sigaction sigHandler;
 	sigHandler.sa_handler = ignoreSIGINT;
 	sigemptyset(&sigHandler.sa_mask);
@@ -517,6 +518,30 @@ int main(int argc, char *argv[]) {
 				int numb_args = 0;
 
 				parseArgs(&numb_args, argsForCommand, command, fullPath, &i, argc);
+
+				/*  TODO make sure all functionality is retained in external function
+				// parse the argument flags
+				int flagIndx = 0;
+
+				for (; flagIndx < MAX_ARGS; flagIndx++) {
+					argsForCommand[flagIndx] = NULL;
+				}
+
+				flagIndx = 0;     // initialize the first argument as the program's own name, which is how argv is expected
+				argsForCommand[flagIndx++] = fullPath;
+
+				int j = ++i;
+				while (j < argc && command->argv[j] != NULL) {         // pass all
+
+					// assume all subsequent non-valid program names are arguments or flags to be passed to previous command
+					if (command->argv[j][0] != '&' &&
+					    (command->argv[j][0] == '-' || lookupPath(command->argv[j], dirs, numDirs) == NULL)) {
+						argsForCommand[flagIndx++] = command->argv[j++];
+						i++;    // only increment i if the current argv value is a flag
+					} else {
+						break;
+					}
+				}*/
 
 				pid_t pid = fork();
 
