@@ -183,89 +183,6 @@ void ignoreSIGINT(int sig) {
 }
 
 
-void cleanUpJobs1(int *currNumbJobs, int *jobIDs, char **jobNames) {
-
-//	while(1) {}
-
-	// check if any jobs in the list have pids that no longer exist
-	int jb = 0;
-	for (; jb < *(currNumbJobs); jb++) {
-
-		/* Note: even if a process finishes and exits, it's PID sometimes
-		 * remains valid until the zombie process is reaped by its parent process
-		 */
-
-
-		kill(jobIDs[jb], 0);   // check if process is still alive
-		if (errno == ESRCH) {
-
-			jobNames[jb] = NULL;
-			jobIDs[jb] = 0;
-			currNumbJobs--;
-
-		} else {
-			//printf("Job is still valid: %d %s\n", jobIDs[jb], jobNames[jb]);
-		}
-	}
-	// reposition job arrays to fill any null values between non-null values
-	for (int m = jb; m < MAX_BACKGROUND_JOBS; m++) {    //
-
-		if (jobNames[m] ==
-		    NULL) {      // replace this NULL value with the next non-NULL value in the list, if one exists
-			for (int n = m + 1; n < MAX_BACKGROUND_JOBS; n++) {
-
-				if (jobNames[n] != NULL) {
-					jobNames[m] = jobNames[n];
-					jobIDs[m] = jobIDs[n];
-					jobNames[n] = NULL;
-					jobIDs[n] = 0;
-					break;
-				}
-			}
-		}
-	}
-}
-
-
-
-/* TODO: figure out how to check if a job has completed or been terminated externally,
- * then automatically remove it from jobs list */
-
-/** kill job
- * @param signal signal to pass to kill
- * @param pidToKill
- * @param currNmbJobs current number of jobs
- * @param jobIDs list of job ids
- * @param jobNames list of corresponding job names
- */
-void killJob_(int signal, int pidToKill, int currNmbJobs, int *jobIDs, char **jobNames) {
-
-	kill(pidToKill, signal);
-
-	int jb = 0;
-	for (; jb < currNmbJobs; jb++) {
-		if (jobIDs[jb] == pidToKill) {
-			jobNames[jb] = NULL;
-			jobIDs[jb] = 0;
-		}
-	}
-	// reposition job arrays to fill any null values between non-null values
-	for (int m = jb; m < currNmbJobs; m++) {    //
-		if (jobNames[m] == NULL) {      // replace this NULL value with the next non-NULL value, if there are any
-			for (int n = m + 1; n < currNmbJobs; n++) {
-				if (jobNames[n] == NULL) {
-					continue;
-				}
-				jobNames[m] = jobNames[n];
-				jobIDs[m] = jobIDs[n];
-				jobNames[n] = NULL;
-				jobIDs[n] = 0;
-				break;
-			}
-		}
-	}
-}
-
 /* TODO: figure out how to check if a job has completed or been terminated externally,
  * then automatically remove it from jobs list */
 
@@ -341,7 +258,8 @@ void cleanUpJobs(Job *jobs, int *currNumbJobs) {
  * @param argc
  * @return
  */
-char** parseArgs(int *numb_args, char** argsForCommand, Command *command, char *fullPath, int *input_index, int argc) {
+char** parseArgs(int *numb_args, char** argsForCommand, Command *command, char *programPath, int *input_index, int argc,
+		char** dirs, const int* numDirs) {
 	// parse the argument flags
 
 	int flagIndx = 0;
@@ -351,19 +269,39 @@ char** parseArgs(int *numb_args, char** argsForCommand, Command *command, char *
 	}
 
 	flagIndx = 0;     // initialize the first argument as the program's own name, which is how argv is expected
-	argsForCommand[flagIndx++] = fullPath;
+	argsForCommand[flagIndx++] = programPath;
 
 	// equivalent to *input_index = *(input_index) + 1; j = *(input_index)
 	int j = ++(*input_index);
 	while (j < argc && command->argv[j] != NULL) {         // pass all
 
 		// assume all subsequent non-valid program names are arguments or flags to be passed to previous command
-		if (command->argv[j][0] != '&') {
-		//&& (command->argv[j][0] == '-' || lookupPath(command->argv[j], dirs, numDirs) == NULL)) {
+		if ((j == argc-1) && command->argv[j][0] == '&') {
+			break;
+		}
+
+		if (command->argv[j][0] == '-') {
 			argsForCommand[flagIndx++] = command->argv[j++];
 			input_index++;    // only increment i if the current argv value is a flag
+
 		} else {
-			break;
+
+
+			char *fullPath = lookupPath(command->argv[j], dirs, *(numDirs));
+
+			if (fullPath != NULL){
+
+				//todo: parse path shortcuts, ie  ..  or  ../..  ?  they only work if passed to ls
+
+
+				printf("Got here\n");
+
+				argsForCommand[flagIndx++] = command->argv[j++];
+				input_index++;
+				break;
+			} else {
+				argsForCommand[flagIndx++] = command->argv[j++];
+			}
 		}
 	}
 
@@ -517,7 +455,7 @@ int main(int argc, char *argv[]) {
 				char *argsForCommand[MAX_ARGS];
 				int numb_args = 0;
 
-				parseArgs(&numb_args, argsForCommand, command, fullPath, &i, argc);
+				parseArgs(&numb_args, argsForCommand, command, fullPath, &i, argc, dirs, &numDirs);
 
 				/*  TODO make sure all functionality is retained in external function
 				// parse the argument flags
@@ -542,6 +480,12 @@ int main(int argc, char *argv[]) {
 						break;
 					}
 				}*/
+
+				printf("All flags for command:\t");
+				for (int b=0; b<numb_args; b++) {
+					printf("%s\t", argsForCommand[b]);
+				}
+				printf("\n");
 
 				pid_t pid = fork();
 
