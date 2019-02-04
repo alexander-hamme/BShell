@@ -190,8 +190,7 @@ void ignoreSIGINT(int sig) {
  * @param signal signal to pass to kill
  * @param pidToKill
  * @param currNmbJobs current number of jobs
- * @param jobIDs list of job ids
- * @param jobNames list of corresponding job names
+ * @param jobs array of Job structs
  */
 void killJob(int signal, int pidToKill, int *currNmbJobs, Job *jobs) {
 
