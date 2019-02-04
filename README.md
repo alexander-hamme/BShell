@@ -17,3 +17,6 @@ Features to be Implemented Next:
 - piping (`|`), e.g. `cat example.txt | grep “keyword”`
 - tab completion
 - history function
+
+
+(Note this code only runs in Unix environments at the moment)
