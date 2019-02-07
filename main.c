@@ -18,8 +18,6 @@
 #include <pthread.h>
 #include <errno.h>
 
-
-
 int parsePath(char *dirs[]);
 
 char *lookupPath(char *fname, char **dir, int num);
@@ -262,8 +260,6 @@ void cleanUpJobs(Job *jobs, int *currNumbJobs) {
 char** parseArgs(int *numb_args, char** argsForCommand, Command *command, char *programPath, int *input_index, int argc,
 		char** dirs, const int* numDirs) {
 	// parse the argument flags
-
-	// todo get rid of input_index parameter, it's not serving any useful purpose anymore
 
 	int flagIndx = 0;
 
