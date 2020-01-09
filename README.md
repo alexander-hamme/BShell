@@ -12,11 +12,11 @@ Currently implemented features:
 - all shell commands that run native executables (e.g. cat, grep, tar, etc)
 
 Features to be implemented next:
-- wildcard (`*`) expansion, e.g. `cat *.txt`
-- I/O redirection (`>` and `<`), e.g. `ls ./ > filelist.txt`
+- wildcard (`*`) expansion, e.g. `mv *.txt ..`
+- I/O redirection (`>` and `<`), e.g. `cat file1 file2 > file3`
 - piping (`|`), e.g. `cat example.txt | grep “keyword”`
 - tab completion
-- history function
+- history
 
 
-(Note this code only runs in Unix environments at the moment)
+(Note this code will only run in Unix environments)
